@@ -1,0 +1,38 @@
+# Load Generator — simulates user traffic for testing
+# Language: Python (Locust)
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgenerator
+spec:
+  selector:
+    matchLabels:
+      app: loadgenerator
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: loadgenerator
+    spec:
+      terminationGracePeriodSeconds: 5
+      restartPolicy: Always
+      initContainers:
+      - name: frontend-check
+        image: busybox:latest
+        command: ['sh', '-c', 'until nslookup frontend.default.svc.cluster.local; do echo waiting for frontend; sleep 2; done;']
+      containers:
+      - name: main
+        image: loadgenerator
+        env:
+        - name: FRONTEND_ADDR
+          value: "frontend:80"
+        - name: USERS
+          value: "10"
+        resources:
+          requests:
+            cpu: 300m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi

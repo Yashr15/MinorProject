@@ -1,0 +1,156 @@
+# Docker Compose — Run all 11 microservices locally for development/testing
+#
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose up frontend    # Start only frontend + dependencies
+#   docker compose logs -f        # Follow logs
+#   docker compose down           # Stop everything
+#
+# Access the app at http://localhost:8080
+
+services:
+
+  # ─── Frontend (Go) ─────────────────────────────
+  frontend:
+    build:
+      context: ./src/frontend
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - CURRENCY_SERVICE_ADDR=currencyservice:7000
+      - CART_SERVICE_ADDR=cartservice:7070
+      - RECOMMENDATION_SERVICE_ADDR=recommendationservice:8080
+      - SHIPPING_SERVICE_ADDR=shippingservice:50051
+      - CHECKOUT_SERVICE_ADDR=checkoutservice:5050
+      - AD_SERVICE_ADDR=adservice:9555
+      - ENV_PLATFORM=local
+    depends_on:
+      - productcatalogservice
+      - currencyservice
+      - cartservice
+      - recommendationservice
+      - shippingservice
+      - checkoutservice
+      - adservice
+    restart: unless-stopped
+
+  # ─── Cart Service (C#) ─────────────────────────
+  cartservice:
+    build:
+      context: ./src/cartservice/src
+    environment:
+      - REDIS_ADDR=redis-cart:6379
+    depends_on:
+      - redis-cart
+    restart: unless-stopped
+
+  # ─── Redis (Cart Database) ─────────────────────
+  redis-cart:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # ─── Product Catalog Service (Go) ──────────────
+  productcatalogservice:
+    build:
+      context: ./src/productcatalogservice
+    environment:
+      - PORT=3550
+      - DISABLE_PROFILER=1
+    restart: unless-stopped
+
+  # ─── Currency Service (C++) ──────────────────────
+  currencyservice:
+    build:
+      context: ./src/currencyservice
+    environment:
+      - PORT=7000
+      - DISABLE_PROFILER=1
+    restart: unless-stopped
+
+  # ─── Payment Service (Node.js) ─────────────────
+  paymentservice:
+    build:
+      context: ./src/paymentservice
+    environment:
+      - PORT=50051
+      - DISABLE_PROFILER=1
+    restart: unless-stopped
+
+  # ─── Shipping Service (Go) ─────────────────────
+  shippingservice:
+    build:
+      context: ./src/shippingservice
+    environment:
+      - PORT=50051
+      - DISABLE_PROFILER=1
+    restart: unless-stopped
+
+  # ─── Email Service (Python) ────────────────────
+  emailservice:
+    build:
+      context: ./src/emailservice
+    environment:
+      - PORT=8080
+      - DISABLE_PROFILER=1
+    restart: unless-stopped
+
+  # ─── Checkout Service (Go) ─────────────────────
+  checkoutservice:
+    build:
+      context: ./src/checkoutservice
+    environment:
+      - PORT=5050
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - SHIPPING_SERVICE_ADDR=shippingservice:50051
+      - PAYMENT_SERVICE_ADDR=paymentservice:50051
+      - EMAIL_SERVICE_ADDR=emailservice:5000
+      - CURRENCY_SERVICE_ADDR=currencyservice:7000
+      - CART_SERVICE_ADDR=cartservice:7070
+    depends_on:
+      - productcatalogservice
+      - shippingservice
+      - paymentservice
+      - emailservice
+      - currencyservice
+      - cartservice
+    restart: unless-stopped
+
+  # ─── Recommendation Service (Python) ───────────
+  recommendationservice:
+    build:
+      context: ./src/recommendationservice
+    environment:
+      - PORT=8080
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - DISABLE_PROFILER=1
+    depends_on:
+      - productcatalogservice
+    restart: unless-stopped
+
+  # ─── Ad Service (Java) ─────────────────────────
+  adservice:
+    build:
+      context: ./src/adservice
+    environment:
+      - PORT=9555
+    restart: unless-stopped
+
+  # ─── Load Generator (Python/Locust) ────────────
+  # Uncomment to simulate traffic
+  # loadgenerator:
+  #   build:
+  #     context: ./src/loadgenerator
+  #   environment:
+  #     - FRONTEND_ADDR=frontend:8080
+  #     - USERS=10
+  #   depends_on:
+  #     - frontend
+
+volumes:
+  redis-data:

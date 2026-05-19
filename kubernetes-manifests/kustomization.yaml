@@ -1,0 +1,21 @@
+# Kustomization — lists all Kubernetes manifests to deploy
+#
+# Usage: kubectl apply -k kubernetes-manifests/
+# This will deploy all the services listed below.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- emailservice.yaml
+- recommendationservice.yaml
+- productcatalogservice.yaml
+- paymentservice.yaml
+- currencyservice.yaml
+- shippingservice.yaml
+- adservice.yaml
+- checkoutservice.yaml
+- cartservice.yaml
+- frontend.yaml
+- redis.yaml
+- loadgenerator.yaml

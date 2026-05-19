@@ -1,0 +1,53 @@
+# Ad Service — serves text ads based on context
+# Language: Java
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adservice
+spec:
+  selector:
+    matchLabels:
+      app: adservice
+  template:
+    metadata:
+      labels:
+        app: adservice
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+      - name: server
+        image: adservice
+        ports:
+        - containerPort: 9555
+        env:
+        - name: PORT
+          value: "9555"
+        readinessProbe:
+          periodSeconds: 15
+          grpc:
+            port: 9555
+        livenessProbe:
+          periodSeconds: 15
+          grpc:
+            port: 9555
+        resources:
+          requests:
+            cpu: 200m
+            memory: 180Mi
+          limits:
+            cpu: 300m
+            memory: 300Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adservice
+spec:
+  type: ClusterIP
+  selector:
+    app: adservice
+  ports:
+  - name: grpc
+    port: 9555
+    targetPort: 9555
