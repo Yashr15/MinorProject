@@ -16,4 +16,4 @@ COPY --from=builder /install /usr/local
 COPY . .
 
 # Locust is the load testing framework
-ENTRYPOINT ["locust", "--host=http://${FRONTEND_ADDR}", "--headless", "-u", "${USERS:-10}"]
+ENTRYPOINT ["sh", "-c", "exec locust --host=http://${FRONTEND_ADDR} --headless -u ${USERS:-10}"]

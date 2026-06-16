@@ -14,6 +14,9 @@
 
 set -euo pipefail
 
+# Disable AWS CLI interactive pager for scripting
+export AWS_PAGER=""
+
 # ─── Configuration ────────────────────────────────
 AWS_REGION="ap-south-1"
 PROJECT_NAME="online-boutique"
@@ -32,7 +35,7 @@ echo ""
 # ─── Step 1: Create S3 Bucket ─────────────────────
 echo "📦 Creating S3 bucket for state storage..."
 
-if aws s3api head-bucket --bucket "${BUCKET_NAME}" 2>/dev/null; then
+if aws s3api head-bucket --bucket "${BUCKET_NAME}" >/dev/null 2>&1; then
     echo "   ✅ Bucket already exists"
 else
     aws s3api create-bucket \
@@ -61,7 +64,7 @@ else
     aws s3api put-public-access-block \
         --bucket "${BUCKET_NAME}" \
         --public-access-block-configuration \
-            "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+        "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
     echo "   ✅ Bucket created with versioning + encryption + public access blocked"
 fi
@@ -69,7 +72,7 @@ fi
 # ─── Step 2: Create DynamoDB Table ────────────────
 echo "🔒 Creating DynamoDB table for state locking..."
 
-if aws dynamodb describe-table --table-name "${DYNAMODB_TABLE}" --region "${AWS_REGION}" 2>/dev/null; then
+if aws dynamodb describe-table --table-name "${DYNAMODB_TABLE}" --region "${AWS_REGION}" >/dev/null 2>&1; then
     echo "   ✅ DynamoDB table already exists"
 else
     aws dynamodb create-table \

@@ -92,7 +92,10 @@ terraform plan \
 log "Applying Terraform plan..."
 terraform apply -input=false tfplan
 
-success "Infrastructure provisioned!"
+# Retrieve the actual cluster name dynamically from Terraform outputs
+CLUSTER_NAME=$(terraform output -raw cluster_name)
+
+success "Infrastructure provisioned! Cluster Name: ${CLUSTER_NAME}"
 
 # ═══════════════════════════════════════════════════
 # PHASE 2: CONFIGURE KUBECTL
@@ -170,7 +173,7 @@ cd "${PROJECT_ROOT}"
 
 for SERVICE in "${ALL_SERVICES[@]}"; do
     ECR_IMAGE="${ECR_REGISTRY}/${PROJECT_NAME}/${SERVICE}:${IMAGE_TAG}"
-    sed -i.bak "s|image: ${SERVICE}$|image: ${ECR_IMAGE}|g" \
+    sed -i.bak -E "s|image:[[:space:]]*([^[:space:]]+/)?${SERVICE}(:[^[:space:]]+)?([[:space:]]+.*)?$|image: ${ECR_IMAGE}|g" \
         "kubernetes-manifests/${SERVICE}.yaml" 2>/dev/null || true
 done
 

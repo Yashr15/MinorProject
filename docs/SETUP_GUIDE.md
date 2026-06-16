@@ -98,7 +98,8 @@ terraform plan
 terraform apply
 
 # 2. Connect kubectl to EKS
-aws eks update-kubeconfig --region ap-south-1 --name online-boutique-eks-dev
+# Run the kubectl_configure command outputted by Terraform, or run:
+aws eks update-kubeconfig --region ap-south-1 --name $(terraform output -raw cluster_name)
 
 # 3. Build and push Docker images
 cd ..
@@ -136,7 +137,7 @@ Open http://localhost:3000
 ### Prometheus (raw metrics)
 
 ```bash
-kubectl port-forward svc/monitoring-kube-prometheus-stack-prometheus 9090:9090 -n monitoring
+kubectl port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090 -n monitoring
 ```
 
 Open http://localhost:9090

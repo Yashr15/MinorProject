@@ -17,12 +17,14 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
       - name: server
-        image: cartservice
+        image: 553136990999.dkr.ecr.ap-south-1.amazonaws.com/online-boutique/cartservice:34e95c8
         ports:
         - containerPort: 7070
         env:
         - name: REDIS_ADDR
           value: "redis-cart:6379"
+        - name: ASPNETCORE_HTTP_PORTS
+          value: "7070"
         readinessProbe:
           periodSeconds: 5
           grpc:

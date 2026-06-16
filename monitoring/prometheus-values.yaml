@@ -47,8 +47,7 @@ grafana:
 
   # Persistence — save dashboards across restarts
   persistence:
-    enabled: true
-    size: 5Gi
+    enabled: false
 
 # ─── Prometheus Configuration ───────────────────
 
@@ -65,15 +64,6 @@ prometheus:
       limits:
         cpu: 500m
         memory: 1Gi
-
-    # Storage for metrics
-    storageSpec:
-      volumeClaimTemplate:
-        spec:
-          accessModes: ["ReadWriteOnce"]
-          resources:
-            requests:
-              storage: 10Gi
 
     # Scrape interval — how often Prometheus collects metrics
     scrapeInterval: 30s
