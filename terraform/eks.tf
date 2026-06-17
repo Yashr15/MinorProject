@@ -44,3 +44,23 @@ module "eks" {
     aws_iam_role_policy_attachment.ecr_read,
   ]
 }
+
+# ─── EKS Access Entries for Cluster Access ──────
+
+# Grant cluster admin permissions to default user (account 871148650925)
+resource "aws_eks_access_entry" "default_user" {
+  cluster_name      = module.eks.cluster_name
+  principal_arn     = "arn:aws:iam::871148650925:user/terraform-admin"
+  type              = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "default_user" {
+  cluster_name  = module.eks.cluster_name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = "arn:aws:iam::871148650925:user/terraform-admin"
+
+  access_scope {
+    type = "cluster"
+  }
+}
+
