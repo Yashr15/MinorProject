@@ -229,3 +229,64 @@ During testing, we verified the Load Balancer endpoint was public and healthy by
 
 * **The Reason:** Modern browsers (Safari, Chrome on mobile) automatically upgrade unencrypted HTTP URLs (`http://`) to secure HTTPS URLs (`https://`). Since our AWS Load Balancer was configured to listen only on **HTTP (Port 80)** and had no SSL certificate set up for **HTTPS (Port 443)**, the mobile browser's connection request timed out.
 * **The Solution:** Open the browser in **Incognito/Private mode** and explicitly type `http://` before the load balancer DNS hostname.
+
+---
+
+## Part 8: Setting up Jenkins (CI/CD) on EC2 & EKS Authentication Troubleshooting
+
+### 39. `ssh -i "online-boutique-jenkins.pem" ubuntu@ec2-13-203-199-19.ap-south-1.compute.amazonaws.com`
+* **Why:** To connect to the newly created Jenkins EC2 instance.
+* **Findings:** Established SSH connection to the remote Ubuntu server.
+
+### 40. `sudo apt update -y && sudo apt install -y openjdk-21-jdk`
+* **Why:** Installed Java 21, as the latest Jenkins (2.555+) requires Java 21/25 and no longer supports Java 17.
+* **Findings:** Successfully installed OpenJDK 21.
+
+### 41. `curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key | sudo tee /usr/share/keyrings/jenkins-keyring.asc > /dev/null`
+* **Why:** Downloaded the official 2026 repository GPG signing key to resolve the `NO_PUBKEY 7198F4B714ABFC68` signature verification error.
+* **Findings:** Imported the valid signing key for package verification.
+
+### 42. `echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" | sudo tee /etc/apt/sources.list.d/jenkins.list`
+* **Why:** Registered the stable Jenkins debian repository source.
+* **Findings:** Configured package source successfully.
+
+### 43. `sudo apt update -y && sudo apt install -y jenkins`
+* **Why:** Updated package lists and installed Jenkins.
+* **Findings:** Installed and enabled the Jenkins system service.
+
+### 44. `sudo systemctl status jenkins`
+* **Why:** Checked if the Jenkins service was active and running.
+* **Findings:** The service was successfully started (`active (running)`).
+
+### 45. `sudo apt install -y docker.io && sudo systemctl enable --now docker`
+* **Why:** Installed Docker daemon on the Jenkins server so Jenkins can build container images.
+* **Findings:** Installed and launched the Docker daemon service.
+
+### 46. `sudo usermod -aG docker jenkins && sudo usermod -aG docker ubuntu && sudo systemctl restart jenkins`
+* **Why:** Added the `jenkins` system user to the `docker` security group, giving Jenkins permission to execute docker build/push commands without `sudo`.
+* **Findings:** Successfully authorized Jenkins to run docker commands.
+
+### 47. `sudo cat /var/lib/jenkins/secrets/initialAdminPassword`
+* **Why:** Printed the initial admin setup password to register the admin account in the Jenkins Web UI.
+* **Findings:** Retrived the admin security token.
+
+### 48. `curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl`
+* **Why:** Installed the `kubectl` CLI tool on the Jenkins server to allow Jenkins to deploy resources to EKS.
+* **Findings:** Downloaded and installed `kubectl`.
+
+### 49. `sudo apt install -y unzip && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && sudo ./aws/install`
+* **Why:** Installed the AWS CLI v2 on the Jenkins server to support AWS login and command executions in the pipeline.
+* **Findings:** Installed `aws` CLI globally.
+
+### 50. `aws sts get-caller-identity --profile user2` (Run locally)
+* **Why:** Checked our exact IAM user name associated with `user2`.
+* **Findings:** The IAM User ARN is `arn:aws:iam::553136990999:user/terraform-admin`.
+
+### 51. `terraform workspace select dev && terraform apply -var="environment=dev" -var="cluster_name=online-boutique-eks-dev-dev" -auto-approve` (Run locally)
+* **Why:** Applied the new `access_config` and `aws_eks_access_policy_association.default_user` changes locally using the correct workspace `dev`.
+* **Findings:** Switched the EKS cluster to `API_AND_CONFIG_MAP` mode and granted cluster admin access to the default profile, resolving the EKS deploy authentication blockage.
+
+### 52. `git pull origin main --rebase && git push origin main` (Run locally)
+* **Why:** Pulled changes from GitHub, integrated our local fixes, and pushed the updated code to the remote repository.
+* **Findings:** Synced local codebase with remote.
+
