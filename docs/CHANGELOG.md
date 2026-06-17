@@ -84,3 +84,26 @@ This file records every modification made to the codebase to fix issues during d
 * **Change:** Appended `hpa.yaml` to the list of resource paths.
 * **Why:** To include the new HPA configuration in the default `kubectl apply` kustomize deploy sequence.
 
+---
+
+## 7. Jenkins CI/CD Setup, EKS Authentication Upgrade & Cluster Reconfiguration
+
+### [terraform/modules/eks/main.tf](file:///c:/Users/Yasha%20Goyal/Documents/test-project/MinorProject/terraform/modules/eks/main.tf)
+* **Change:** Added the `access_config` block with `authentication_mode = "API_AND_CONFIG_MAP"` and enabled bootstrap permissions.
+* **Why:** To upgrade the EKS cluster from the legacy `CONFIG_MAP` auth mode to the modern Access Entries API, allowing other IAM users/roles (like Jenkins) to authenticate.
+
+### [terraform/eks.tf](file:///c:/Users/Yasha%20Goyal/Documents/test-project/MinorProject/terraform/eks.tf)
+* **Change 1:** Removed the duplicate `aws_eks_access_entry.user2` resource.
+* **Why:** Since `user2` is the cluster creator and bootstrap admin permissions are enabled, adding it again caused a conflict (`ResourceInUseException`).
+* **Change 2:** Corrected the policy ARN format for `default_user` to use the EKS-specific path (`arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy`).
+* **Why:** EKS Access Policy associations require cluster-access-policy ARNs rather than standard IAM policy ARNs, which originally caused an `InvalidParameterException`.
+
+### [Jenkinsfile](file:///c:/Users/Yasha%20Goyal/Documents/test-project/MinorProject/Jenkinsfile)
+* **Change:** Updated `EKS_CLUSTER` to `online-boutique-eks-dev-dev-dev`.
+* **Why:** To align the Jenkins deploy stage with the new cluster name provisioned by Terraform in the workspace.
+
+### [docs/SETUP_GUIDE.md](file:///c:/Users/Yasha%20Goyal/Documents/test-project/MinorProject/docs/SETUP_GUIDE.md)
+* **Change:** Merged and refined Step 6 to document Java 21, the 2026 GPG signing keys, Docker daemon group configuration, and AWS CLI + `kubectl` local server setups.
+* **Why:** To ensure the central setup documentation is correct, functional, and up-to-date.
+
+
