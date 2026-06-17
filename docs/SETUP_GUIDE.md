@@ -154,13 +154,21 @@ Jenkins automates the build → push → deploy cycle so you don't have to run s
 
 ```bash
 # Launch an Ubuntu t3.medium EC2 instance, then SSH in and run:
-sudo apt update
-sudo apt install -y openjdk-17-jdk
-curl -fsSL https://pkg.jenkins.io/debian/jenkins.io-2023.key | sudo tee /usr/share/keyrings/jenkins-keyring.asc
-echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian binary/" | sudo tee /etc/apt/sources.list.d/jenkins.list
-sudo apt update
+sudo apt update -y
+
+# Install Java 21 (required for Jenkins 2.555+)
+sudo apt install -y openjdk-21-jdk
+
+# Add Jenkins 2026 GPG signing key
+curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key | sudo tee /usr/share/keyrings/jenkins-keyring.asc > /dev/null
+
+# Register the stable repository
+echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" | sudo tee /etc/apt/sources.list.d/jenkins.list
+
+# Update package lists and install Jenkins
+sudo apt update -y
 sudo apt install -y jenkins
-sudo systemctl start jenkins
+sudo systemctl enable --now jenkins
 ```
 
 **Option B — Run locally with Docker:**
@@ -173,7 +181,7 @@ docker run -d -p 8080:8080 -p 50000:50000 \
 
 ### 6.2 Initial Setup
 
-1. Open `http://<jenkins-ip>:8080`
+1. Open `http://<jenkins-ip>:8080` (where `<jenkins-ip>` is the public IP of your EC2 instance or `localhost`).
 2. Get the initial admin password:
    ```bash
    # EC2:
@@ -181,8 +189,8 @@ docker run -d -p 8080:8080 -p 50000:50000 \
    # Docker:
    docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
    ```
-3. Install **suggested plugins**
-4. Create your admin user
+3. Install **suggested plugins**.
+4. Create your admin user.
 
 ### 6.3 Install Required Plugins
 
@@ -195,13 +203,20 @@ Go to **Manage Jenkins → Plugins → Available** and install:
 | **Pipeline: AWS Steps** | AWS authentication in pipeline |
 | **Git** | Pull code from GitHub |
 
-### 6.4 Install Docker on Jenkins Server
+### 6.4 Install & Configure Docker on Jenkins Server
 
-Jenkins needs Docker to build images:
+Jenkins needs Docker to build images and must have group permissions:
 
 ```bash
+# Install Docker
 sudo apt install -y docker.io
+sudo systemctl enable --now docker
+
+# Give Jenkins and default Ubuntu users permission to run Docker commands
 sudo usermod -aG docker jenkins
+sudo usermod -aG docker ubuntu
+
+# Restart Jenkins to apply group membership changes
 sudo systemctl restart jenkins
 ```
 
@@ -209,15 +224,18 @@ sudo systemctl restart jenkins
 
 ```bash
 curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install kubectl /usr/local/bin/kubectl
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+rm kubectl
 ```
 
 ### 6.6 Install AWS CLI on Jenkins Server
 
 ```bash
+sudo apt install -y unzip
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip awscliv2.zip
 sudo ./aws/install
+rm -rf awscliv2.zip aws
 ```
 
 ### 6.7 Configure Credentials in Jenkins
@@ -226,8 +244,8 @@ Go to **Manage Jenkins → Credentials → Global → Add Credentials**:
 
 | Credential ID | Type | Value |
 |---------------|------|-------|
-| `aws-credentials` | AWS Credentials | Your AWS Access Key + Secret Key |
-| `aws-account-id` | Secret text | Your 12-digit AWS Account ID |
+| `aws-credentials` | AWS Credentials | Your AWS Access Key + Secret Key (from your local `[user2]` profile keys) |
+| `aws-account-id` | Secret text | Your 12-digit AWS Account ID (`553136990999`) |
 
 ### 6.8 Create the Pipeline
 
@@ -236,7 +254,8 @@ Go to **Manage Jenkins → Credentials → Global → Add Credentials**:
 3. Under **Pipeline**:
    - Definition: **Pipeline script from SCM**
    - SCM: **Git**
-   - Repository URL: your GitHub repo URL
+   - Repository URL: `https://github.com/Yashr15/MinorProject.git` (or your personal fork)
+   - Credentials: **- none -** (since it is a public repository)
    - Branch: `*/main`
    - Script path: `Jenkinsfile`
 4. **Save → Build Now**
