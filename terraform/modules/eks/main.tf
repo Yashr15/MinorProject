@@ -4,9 +4,10 @@
 # Node Group 2: "infra-nodes" — c7i-flex.large (runs monitoring/infra)
 
 resource "aws_eks_cluster" "this" {
-  name     = var.cluster_name
-  role_arn = var.cluster_role_arn
-  version  = var.cluster_version
+  name                          = var.cluster_name
+  role_arn                      = var.cluster_role_arn
+  version                       = var.cluster_version
+  bootstrap_self_managed_addons = false
 
   vpc_config {
     subnet_ids              = concat(var.subnet_ids, var.public_subnet_ids)

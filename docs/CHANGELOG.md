@@ -67,3 +67,20 @@ This file records every modification made to the codebase to fix issues during d
 ### [.gitignore](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/.gitignore)
 * **Change:** Added `*.tfplan` and `tfplan`.
 * **Why:** To prevent local Terraform plan binaries from being added to Git status and committed to remote repositories.
+
+---
+
+## 6. Terraform State Drift, EKS Import & Autoscaling Implementation
+
+### [terraform/modules/eks/main.tf](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/modules/eks/main.tf)
+* **Change:** Added `bootstrap_self_managed_addons = false` to the EKS cluster definition.
+* **Why:** To match the default AWS configuration of the EKS cluster created in the first run, preventing Terraform from trying to destroy and recreate the active cluster.
+
+### [kubernetes-manifests/hpa.yaml](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/kubernetes-manifests/hpa.yaml)
+* **Change:** Created a HorizontalPodAutoscaler (HPA) resource `frontend-hpa`.
+* **Why:** To automatically scale frontend pods between 1 and 5 replicas based on CPU load.
+
+### [kubernetes-manifests/kustomization.yaml](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/kubernetes-manifests/kustomization.yaml)
+* **Change:** Appended `hpa.yaml` to the list of resource paths.
+* **Why:** To include the new HPA configuration in the default `kubectl apply` kustomize deploy sequence.
+

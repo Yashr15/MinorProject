@@ -17,7 +17,7 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
       - name: server
-        image: 553136990999.dkr.ecr.ap-south-1.amazonaws.com/online-boutique/adservice:34e95c8
+        image: 553136990999.dkr.ecr.ap-south-1.amazonaws.com/online-boutique/adservice:6bec0a9
         ports:
         - containerPort: 9555
         env:

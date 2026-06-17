@@ -19,3 +19,4 @@ resources:
 - frontend.yaml
 - redis.yaml
 - loadgenerator.yaml
+- hpa.yaml

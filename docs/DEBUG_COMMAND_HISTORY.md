@@ -131,3 +131,101 @@ This document lists every command executed during the troubleshooting, deploymen
 ### 25. `git push origin main` (Second Attempt)
 * **Why:** To push both the local fixes and the merge commit to GitHub.
 * **Findings:** Push succeeded.
+
+---
+
+## Part 5: Handling IDE Crashes, State Drift, and Implementing Autoscaling
+
+When the IDE crashed during the initial deployment run, it abruptly terminated the execution of the Terraform provisioning script. This created a split-brain state (also known as state drift or state mismatch) between what was deployed in AWS and what was recorded in the local Terraform state file, leading to multiple deployment blocker conflicts.
+
+### 26. `ps aux | grep -E 'terraform|deploy.sh' | grep -v grep`
+* **Why:** The IDE crashed mid-deployment. I ran this to check if the deployment script or Terraform processes were still running in the background.
+* **Explanation:** When the IDE crashed, there was a risk that the underlying shell process executing `deploy.sh` or `terraform` was still running. If it was, running another deploy script would create resource collisions and database write contentions. 
+* **Findings:** No matching processes were found, confirming the processes terminated during the crash.
+
+### 27. `terraform workspace show`
+* **Why:** To verify which environment/workspace (e.g., `dev`) was active in Terraform before troubleshooting the state.
+* **Explanation:** Terraform manages isolated state files for each environment (e.g., `dev`, `staging`, `prod`) using workspaces. We needed to confirm we were debugging the correct workspace so that any unlock or import actions were executed against the active target state.
+* **Findings:** The active workspace was confirmed to be `dev`.
+
+### 28. `terraform force-unlock 66205517-34bc-37b9-d7cc-1c21ad77be2a`
+* **Why:** Because the Terraform process crashed mid-deployment, it left a dangling lock in DynamoDB. Running this command released the lock.
+* **Explanation:** Terraform obtains a write lock (using the DynamoDB table `online-boutique-terraform-lock`) whenever an apply begins, preventing concurrent modifications. Because the crash was sudden, the process exited without running the clean-up routines to release the lock, blocking all future runs with a `ConditionalCheckFailedException`.
+* **Findings:** The lock was successfully released, allowing the backend state to be read again.
+
+### 29. `aws ec2 describe-route-tables --filters "Name=vpc-id,Values=vpc-09fb38255317cd8da" --region ap-south-1`
+* **Why:** The subsequent deploy failed with subnet route table association conflict errors. I used this to inspect the exact associations in AWS.
+* **Explanation:** The error log indicated that the private subnets could not be associated with the new route table because they were already associated with another one. Describing all route tables in the VPC revealed that the first crashed run had created a private route table (`rtb-03cf7e9ca5f95aadb`) and associated the subnets with it, but because the state file was never saved, the current state file had no record of this route table and had created a second one (`rtb-0b036faf5d851219b`).
+* **Findings:** Identified the conflicting route table (`rtb-03cf7e9ca5f95aadb`) and its specific association IDs (`rtbassoc-0f1c7e6932eec4188` and `rtbassoc-0ae0bedef37a85641`).
+
+### 30. `aws eks describe-cluster --name online-boutique-eks-dev-dev --region ap-south-1`
+* **Why:** The subsequent deploy failed with `ResourceInUseException` because the EKS cluster already existed in AWS but was missing from the state. I ran this to check the cluster's current configuration and state.
+* **Explanation:** Just like the route table, the EKS cluster had been created in AWS but was never recorded in the Terraform state file. Because EKS cluster names must be unique within an AWS account and region, Terraform's attempt to create a new cluster with the same name was rejected by AWS.
+* **Findings:** Confirmed the cluster existed in AWS and was in the `CREATING` state, meaning it was provisioned during the crashed run and was still finishing its control plane setup.
+
+### 31. `aws ec2 disassociate-route-table --association-id rtbassoc-0f1c7e6932eec4188 --region ap-south-1` (and `rtbassoc-0ae0bedef37a85641`)
+* **Why:** To break the associations between the private subnets and the old, untracked route table in AWS.
+* **Explanation:** You cannot delete or change associations of subnets directly while they have a custom route table association. By disassociating them, they default back to the main VPC route table, freeing them to be associated with the new route table tracked in the Terraform state.
+* **Findings:** Successfully broke the network locks on the subnets.
+
+### 32. `aws ec2 delete-route-table --route-table-id rtb-03cf7e9ca5f95aadb --region ap-south-1`
+* **Why:** To delete the orphaned, untracked private route table in AWS.
+* **Explanation:** Leaving the old private route table in AWS would lead to clean-up failures when tearing down the infrastructure and clutter the AWS Console with unused resources.
+* **Findings:** Old route table successfully destroyed.
+
+### 33. `terraform import -var="environment=dev" -var="cluster_name=online-boutique-eks-dev" module.eks.aws_eks_cluster.this online-boutique-eks-dev-dev`
+* **Why:** To import the EKS cluster from AWS into the current Terraform state file.
+* **Explanation:** By importing the resource, Terraform downloads its configuration from AWS and writes it directly to the state file. This syncs the state file with AWS so that the next time `terraform apply` runs, it knows the cluster already exists and skips the creation step, moving directly to node group creation.
+* **Findings:** Import completed successfully.
+* *Note: To prevent Terraform from destroying and replacing the imported EKS cluster, we added `bootstrap_self_managed_addons = false` to the configuration inside `terraform/modules/eks/main.tf` to match the configuration EKS automatically created in AWS.*
+
+---
+
+## Part 6: Deploying the Metrics Server and Setting up the Autoscaling Simulation
+
+Once the Terraform state was synced, the deployment script ran successfully and exposed the application. To implement and test Horizontal Pod Autoscaling (HPA), we followed a systematic sequence of commands.
+
+### 34. `kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml`
+* **Why:** To install the Kubernetes Metrics Server in the EKS cluster.
+* **Explanation:** An HPA scales pods based on resource metrics (like CPU and Memory usage). However, EKS clusters do not have a resource metrics collector installed by default. Running `kubectl top` or HPA without this server returns an `error: Metrics API not available` error.
+* **Findings:** Deployed the collector daemon to the `kube-system` namespace.
+
+### 35. `kubectl apply -k kubernetes-manifests/`
+* **Why:** To apply the new HPA manifest (`kubernetes-manifests/hpa.yaml`) and register it in `kustomization.yaml`.
+* **Explanation:** We defined the autoscaler targeting the `frontend` deployment with a low CPU threshold (`10%`) to make it easy to trigger and observe scaling during load testing.
+
+### 36. **Traffic Simulation & Monitoring Commands (The Loop)**
+When testing autoscaling, we ran several commands repeatedly in order to monitor the behavior:
+
+1. **`kubectl get hpa -w`**
+   * **Why:** To watch the average CPU utilization of the pods and target replica counts.
+   * **Reason for Repeated Use:** Running it with the `-w` (watch) flag streams changes in real-time. It allowed us to see exactly when CPU utilization crossed the 10% threshold and when the HPA requested a replica scale-up.
+2. **`kubectl top pods`**
+   * **Why:** To check the raw CPU and memory usage of each active pod.
+   * **Reason for Repeated Use:** HPA averages CPU utilization over a period. Running `kubectl top pods` periodically gave us a raw, real-time snapshot of which individual frontend pods were taking the brunt of the traffic and how much CPU (in millicosres) they were drawing.
+3. **`kubectl get pods -l app=frontend -w`**
+   * **Why:** To observe the lifecycle of the frontend pods as they were created and destroyed.
+   * **Reason for Repeated Use:** When HPA changes the replica counts, EKS schedules new pods. Using `-w` allowed us to watch new pods transition from `Pending` -> `ContainerCreating` -> `Running` in real-time, verifying that EKS had sufficient capacity to scale out.
+4. **`kubectl logs -l app=loadgenerator --tail=50`**
+   * **Why:** To monitor the request rate and check for errors from the load generators.
+   * **Reason for Repeated Use:** This confirmed that the simulated users were actively hitting the web page without failing (e.g. returning 200 OKs) and showing the exact requests/second (rps) curve.
+
+### 37. **Simulating Scale-Up**
+* **Command:** `kubectl scale deployment/loadgenerator --replicas=3 && kubectl set env deployment/loadgenerator USERS=500`
+* **Explanation:** This scaled the load testing pods to 3 replicas running 500 simulated users each (1,500 total). The wait time between requests was randomized, sending a massive stream of traffic (~80-100 requests per second) to the frontend.
+* **Findings:** CPU surged to 17%, and the HPA successfully scaled the frontend pods from 1 to 5 replicas.
+
+### 38. **Simulating Scale-Down**
+* **Command:** `kubectl scale deployment/loadgenerator --replicas=1 && kubectl set env deployment/loadgenerator USERS=1`
+* **Explanation:** This reduced traffic to 1 single simulated user to watch the system scale back down.
+* **Findings:** Traffic ceased, and CPU usage dropped to near 0%. 
+* *Note: The HPA waited for a default **5-minute cooldown period** before removing pods. This cooldown is a security feature built into Kubernetes to prevent pod thrashing (repeatedly scaling up and down due to temporary spikes).*
+
+---
+
+## Part 7: Client-side Access Issues (ELB vs HTTPS)
+
+During testing, we verified the Load Balancer endpoint was public and healthy by running a `curl -I` request, which returned a successful `HTTP/1.1 200 OK`. However, accessing the link on other devices (like mobile phones) initially failed.
+
+* **The Reason:** Modern browsers (Safari, Chrome on mobile) automatically upgrade unencrypted HTTP URLs (`http://`) to secure HTTPS URLs (`https://`). Since our AWS Load Balancer was configured to listen only on **HTTP (Port 80)** and had no SSL certificate set up for **HTTPS (Port 443)**, the mobile browser's connection request timed out.
+* **The Solution:** Open the browser in **Incognito/Private mode** and explicitly type `http://` before the load balancer DNS hostname.
