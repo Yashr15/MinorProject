@@ -23,7 +23,7 @@ pipeline {
         AWS_ACCOUNT_ID  = credentials('aws-account-id')    // Store in Jenkins credentials
         ECR_REGISTRY    = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         PROJECT_NAME    = 'online-boutique'
-        EKS_CLUSTER     = 'online-boutique-eks-dev-dev-dev'
+        EKS_CLUSTER     = 'online-boutique-eks-dev'
         IMAGE_TAG       = "${BUILD_NUMBER}"
     }
 
