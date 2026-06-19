@@ -47,17 +47,17 @@ module "eks" {
 
 # ─── EKS Access Entries for Cluster Access ──────
 
-# Grant cluster admin permissions to default user (account 871148650925)
+# Grant cluster admin permissions to the active AWS identity running Terraform
 resource "aws_eks_access_entry" "default_user" {
   cluster_name      = module.eks.cluster_name
-  principal_arn     = "arn:aws:iam::871148650925:user/terraform-admin"
+  principal_arn     = data.aws_caller_identity.current.arn
   type              = "STANDARD"
 }
 
 resource "aws_eks_access_policy_association" "default_user" {
   cluster_name  = module.eks.cluster_name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-  principal_arn = "arn:aws:iam::871148650925:user/terraform-admin"
+  principal_arn = data.aws_caller_identity.current.arn
 
   access_scope {
     type = "cluster"
