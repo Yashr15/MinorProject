@@ -44,3 +44,13 @@ module "eks" {
     aws_iam_role_policy_attachment.ecr_read,
   ]
 }
+
+# Allow Jenkins (and other VPC resources) to connect to EKS API server
+resource "aws_security_group_rule" "jenkins_to_eks" {
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = [var.vpc_cidr] # Allows access from the VPC CIDR (including Jenkins EC2)
+  security_group_id = module.eks.cluster_security_group_id
+}
