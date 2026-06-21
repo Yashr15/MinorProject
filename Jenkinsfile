@@ -23,7 +23,7 @@ pipeline {
         AWS_ACCOUNT_ID  = credentials('aws-account-id')    // Store in Jenkins credentials
         ECR_REGISTRY    = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         PROJECT_NAME    = 'online-boutique'
-        EKS_CLUSTER     = 'online-boutique-eks-dev'
+        // EKS_CLUSTER is read dynamically from Terraform output in the Deploy stage
         IMAGE_TAG       = "${BUILD_NUMBER}"
     }
 
@@ -94,7 +94,8 @@ pipeline {
                             } else {
                                 echo "🔨 Building ${svc} (tag: ${svcTag})..."
                                 sh """
-                                    docker build -t ${ecrRepo}:${svcTag} \
+                                    docker build --platform linux/amd64 \
+                                                 -t ${ecrRepo}:${svcTag} \
                                                  -t ${ecrRepo}:latest \
                                                  ${context}
                                 """
@@ -154,25 +155,47 @@ pipeline {
         stage('Deploy to EKS') {
             steps {
                 withAWS(credentials: 'aws-credentials', region: "${AWS_REGION}") {
-                    sh """
-                        # Configure kubectl to talk to EKS
-                        aws eks update-kubeconfig \
-                            --region ${AWS_REGION} \
-                            --name ${EKS_CLUSTER}
+                    script {
+                        // Dynamically map Git branches to Terraform workspaces
+                        def tfWorkspace = 'dev'
+                        if (env.BRANCH_NAME == 'main') {
+                            tfWorkspace = 'prod'
+                        } else if (env.BRANCH_NAME == 'staging') {
+                            tfWorkspace = 'staging'
+                        }
 
-                        # Deploy all manifests
-                        kubectl apply -k kubernetes-manifests/
+                        sh """
+                            # Get actual cluster name from Terraform output dynamically
+                            cd terraform
+                            terraform init -input=false -reconfigure \
+                                -backend-config="bucket=online-boutique-terraform-state-${AWS_ACCOUNT_ID}"
+                            
+                            # Select or create the branch-specific workspace
+                            terraform workspace select ${tfWorkspace} || terraform workspace new ${tfWorkspace}
+                            
+                            EKS_CLUSTER=\$(terraform output -raw cluster_name)
+                            cd ..
+                            echo "🔍 Deploying to cluster: \$EKS_CLUSTER"
 
-                        # Wait for rollout
-                        echo "⏳ Waiting for deployments to be ready..."
-                        kubectl rollout status deployment/frontend --timeout=120s
-                        kubectl rollout status deployment/cartservice --timeout=120s
+                            # Configure kubectl to talk to EKS
+                            aws eks update-kubeconfig \
+                                --region ${AWS_REGION} \
+                                --name \$EKS_CLUSTER
 
-                        # Show the external URL
-                        echo "🌐 Frontend URL:"
-                        kubectl get svc frontend-external -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-                        echo ""
-                    """
+                            # Deploy all manifests
+                            kubectl apply -k kubernetes-manifests/
+
+                            # Wait for rollout (180s matches deploy.sh)
+                            echo "⏳ Waiting for deployments to be ready..."
+                            kubectl rollout status deployment/frontend --timeout=180s
+                            kubectl rollout status deployment/cartservice --timeout=180s
+
+                            # Show the external URL
+                            echo "🌐 Frontend URL:"
+                            kubectl get svc frontend-external -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                            echo ""
+                        """
+                    }
                 }
                 echo "✅ Deployed to EKS!"
             }
@@ -197,8 +220,12 @@ pipeline {
             """
         }
         always {
-            // Clean up Docker images to save disk space
-            sh 'docker system prune -f || true'
+            // Aggressive Docker cleanup after every build to prevent disk-full errors
+            sh '''
+                docker container prune -f || true
+                docker image prune -a -f || true
+                docker builder prune -a -f || true
+            '''
         }
     }
 }

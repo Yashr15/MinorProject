@@ -23,7 +23,7 @@ spec:
         command: ['sh', '-c', 'until nslookup frontend.default.svc.cluster.local; do echo waiting for frontend; sleep 2; done;']
       containers:
       - name: main
-        image: 553136990999.dkr.ecr.ap-south-1.amazonaws.com/online-boutique/loadgenerator:6858d4a
+        image: loadgenerator
         env:
         - name: FRONTEND_ADDR
           value: "frontend:80"
