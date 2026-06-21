@@ -27,3 +27,7 @@ release/wi-kubernetes-manifests.yaml
 vendor/
 *.tfplan
 tfplan
+
+# Local variable overrides
+*local.tfvars
+*secret.tfvars

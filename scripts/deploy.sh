@@ -83,8 +83,8 @@ if [ -f "terraform.tfvars" ]; then
     fi
 fi
 
-# Initialize Terraform
-terraform init -input=false
+# Initialize Terraform (dynamically setting backend bucket)
+terraform init -input=false -backend-config="bucket=online-boutique-terraform-state-${AWS_ACCOUNT_ID}"
 
 # Select or create workspace
 if terraform workspace list | grep -q "${WORKSPACE}"; then
