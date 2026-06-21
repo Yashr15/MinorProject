@@ -167,6 +167,23 @@ pipeline {
                         sh """
                             # Get actual cluster name from Terraform output dynamically
                             cd terraform
+                            
+                            # Ensure terraform binary is available
+                            if ! command -v terraform &> /dev/null; then
+                                if [ ! -f ./terraform ]; then
+                                    echo "Terraform not found. Downloading local binary..."
+                                    curl -LO https://releases.hashicorp.com/terraform/1.9.0/terraform_1.9.0_linux_amd64.zip
+                                    if command -v unzip &> /dev/null; then
+                                        unzip -o terraform_1.9.0_linux_amd64.zip
+                                    else
+                                        python3 -c "import zipfile; zipfile.ZipFile('terraform_1.9.0_linux_amd64.zip').extractall('.')"
+                                    fi
+                                    chmod +x terraform
+                                    rm -f terraform_1.9.0_linux_amd64.zip
+                                fi
+                                export PATH="\$(pwd):\$PATH"
+                            fi
+                            
                             terraform init -input=false -reconfigure \
                                 -backend-config="bucket=online-boutique-terraform-state-${AWS_ACCOUNT_ID}"
                             
