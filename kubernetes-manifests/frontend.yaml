@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: server
-        image: frontend
+        image: 553136990999.dkr.ecr.ap-south-1.amazonaws.com/online-boutique/frontend:34e95c8
         ports:
         - containerPort: 8080
         readinessProbe:

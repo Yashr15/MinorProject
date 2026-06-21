@@ -308,3 +308,36 @@ terraform force-unlock <LOCK_ID>
 - **Unauthorized:** Double check that `jenkins_iam_arn` in `terraform/terraform.tfvars` matches the credentials used by Jenkins, and that you ran `terraform apply`.
 - **Connection Timeout:** Ensure that the Jenkins instance IP is allowed by the security groups or is running within the VPC.
 
+### 3. kubectl get nodes returns "Forbidden" or "Unauthorized" for Developer Profile
+
+This occurs when the IAM principal configured in your local `~/.kube/config` is either missing an EKS Access Entry or has had its EKS Access Policy Association removed.
+
+#### Why this happens:
+If you provision the cluster, then assign a specific IAM user to `jenkins_iam_arn` in `terraform.tfvars`, Terraform takes management of that user's policy association. If you later clear `jenkins_iam_arn` (setting it to `""`), Terraform destroys the policy association, stripping that IAM user of all EKS permissions. Additionally, if `~/.kube/config` hardcodes the `AWS_PROFILE` environment variable for that user entry, `kubectl` will always run as that profile regardless of your terminal's active profile.
+
+#### How to fix this:
+
+1. **Restore policy association via AWS CLI**:
+   Run the following command using an IAM user with AWS Admin permissions (like `terra-user`) to manually associate the EKS admin policy back to your developer/creator user:
+   ```bash
+   aws eks associate-access-policy \
+     --cluster-name online-boutique-eks-dev \
+     --principal-arn arn:aws:iam::553136990999:user/terraform-admin \
+     --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+     --access-scope type=cluster
+   ```
+
+2. **Authorize other developer profiles (Recommended)**:
+   Instead of modifying the shared `terraform.tfvars` file, create a local, git-ignored `local.tfvars` file under `terraform/` and declare any developer profiles you want to authorize:
+   ```hcl
+   additional_admin_arns = [
+     "arn:aws:iam::553136990999:user/terraform-admin"
+   ]
+   ```
+   Then apply it:
+   ```bash
+   terraform apply -var-file="local.tfvars"
+   ```
+
+3. **Check/Clean local kubeconfig**:
+   If your terminal's active AWS profile is different from the one configured in `~/.kube/config` (or if your kubeconfig hardcodes an `AWS_PROFILE` environment variable for the cluster's exec helper), edit your `~/.kube/config` file to remove the hardcoded profile from the `env` section under the user definition. This allows `kubectl` to automatically use your active CLI profile.

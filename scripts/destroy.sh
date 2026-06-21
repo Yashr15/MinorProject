@@ -70,12 +70,67 @@ else
     warn "Helm not found — skipping"
 fi
 
-# ─── Step 3: Terraform Destroy ────────────────────
-log "Step 3: Destroying Terraform infrastructure..."
+# ─── Step 3: Clean Dangling Cloud Resources ───────
+log "Step 3: Cleaning up dangling cloud resources (ELBs, security groups)..."
+
+AWS_ACCOUNT_ID=""
+if command -v aws >/dev/null 2>&1; then
+    if aws sts get-caller-identity >/dev/null 2>&1; then
+        AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+    fi
+fi
+
+if [ -n "${AWS_ACCOUNT_ID}" ]; then
+    VPC_ID=$(aws ec2 describe-vpcs \
+        --filters "Name=tag:Project,Values=${PROJECT_NAME}" "Name=tag:Workspace,Values=${WORKSPACE}" \
+        --query "Vpcs[0].VpcId" \
+        --output text \
+        --region "${AWS_REGION}" 2>/dev/null || echo "None")
+
+    if [ "${VPC_ID}" != "None" ] && [ -n "${VPC_ID}" ] && [ "${VPC_ID}" != "null" ]; then
+        log "Found active VPC: ${VPC_ID}. Checking for dangling resources..."
+
+        # 1. Delete Classic ELBs in this VPC
+        CLASSIC_ELBS=$(aws elb describe-load-balancers --region "${AWS_REGION}" --query "LoadBalancerDescriptions[?VPCId=='${VPC_ID}'].LoadBalancerName" --output text 2>/dev/null || echo "")
+        for ELB in ${CLASSIC_ELBS}; do
+            warn "Deleting dangling Classic ELB: ${ELB}"
+            aws elb delete-load-balancer --load-balancer-name "${ELB}" --region "${AWS_REGION}" || true
+        done
+
+        # 2. Delete Application/Network ELBs (v2) in this VPC
+        V2_ELBS=$(aws elbv2 describe-load-balancers --region "${AWS_REGION}" --query "LoadBalancers[?VpcId=='${VPC_ID}'].LoadBalancerArn" --output text 2>/dev/null || echo "")
+        for ELB_ARN in ${V2_ELBS}; do
+            warn "Deleting dangling ALB/NLB: ${ELB_ARN}"
+            aws elbv2 delete-load-balancer --load-balancer-arn "${ELB_ARN}" --region "${AWS_REGION}" || true
+        done
+
+        # Give AWS a few seconds to begin detaching ENIs
+        if [ -n "${CLASSIC_ELBS}" ] || [ -n "${V2_ELBS}" ]; then
+            log "Waiting for load balancer deletion and ENI release..."
+            sleep 15
+        fi
+
+        # 3. Delete custom security groups
+        CUSTOM_SGS=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=${VPC_ID}" --region "${AWS_REGION}" --query "SecurityGroups[?GroupName!='default'].GroupId" --output text 2>/dev/null || echo "")
+        for SG in ${CUSTOM_SGS}; do
+            warn "Deleting custom security group: ${SG}"
+            aws ec2 delete-security-group --group-id "${SG}" --region "${AWS_REGION}" || true
+        done
+    fi
+else
+    warn "AWS CLI or credentials not configured — skipping dangling resource cleanup"
+fi
+
+# ─── Step 4: Terraform Destroy ────────────────────
+log "Step 4: Destroying Terraform infrastructure..."
 
 cd "${PROJECT_ROOT}/terraform"
 
-terraform init -input=false
+if [ -n "${AWS_ACCOUNT_ID}" ]; then
+    terraform init -input=false -backend-config="bucket=online-boutique-terraform-state-${AWS_ACCOUNT_ID}"
+else
+    terraform init -input=false
+fi
 
 if terraform workspace list | grep -q "${WORKSPACE}"; then
     terraform workspace select "${WORKSPACE}"
@@ -91,7 +146,7 @@ terraform destroy \
 
 success "Terraform infrastructure destroyed"
 
-# ─── Step 4: Switch back to default workspace ─────
+# ─── Step 5: Switch back to default workspace ─────
 terraform workspace select default
 log "Switched to default workspace"
 
