@@ -133,4 +133,30 @@ This file records every modification made to the codebase to fix issues during d
 * **Change:** Documented Step 6.8 "Configure EKS Access for Jenkins" and added state unlocking troubleshooting steps.
 * **Why:** To establish a clear, repeatable post-clone EKS setup ritual for developers and CI/CD pipelines.
 
+---
+
+## 9. Multi-Developer Portability & Clean Infrastructure Integration
+
+### [kubernetes-manifests/*.yaml](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/kubernetes-manifests/)
+* **Change:** Replaced all hardcoded AWS ECR registry prefixes (`553136990999.dkr.ecr.ap-south-1.amazonaws.com/`) with generic, relative container image names (e.g. `image: frontend`).
+* **Why:** To make the manifests portable across multiple AWS accounts, allowing deploy scripts to dynamically inject the active account's ECR URL.
+
+### [terraform/providers.tf](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/providers.tf) & [scripts/deploy.sh](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/scripts/deploy.sh)
+* **Change 1:** Removed the hardcoded `bucket` key from the S3 backend block in `providers.tf`.
+* **Change 2:** Updated `deploy.sh` to initialize Terraform dynamically using the active caller account: `terraform init -input=false -backend-config="bucket=online-boutique-terraform-state-${AWS_ACCOUNT_ID}"`.
+* **Why:** Decoupled the Terraform backend state bucket, enabling any developer to deploy to their own AWS account without modifying tracked files.
+
+### [terraform/terraform.tfvars](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/terraform.tfvars) & [.gitignore](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/.gitignore)
+* **Change 1:** Reset `additional_admin_arns` to `[]` in the committed variables file.
+* **Change 2:** Added `*local.tfvars` and `*secret.tfvars` patterns to `.gitignore`.
+* **Why:** To keep personal IAM user ARNs out of tracked repository commits, allowing developers to create custom local variables files that are ignored by Git.
+
+### [kubernetes-manifests/hpa.yaml](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/kubernetes-manifests/hpa.yaml)
+* **Change:** Updated CPU target average utilization threshold from `10%` to `50%`.
+* **Why:** To stop pod thrashing (repeatedly creating and destroying pods) under idle or minimal load conditions.
+
+### [Jenkinsfile](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/Jenkinsfile)
+* **Change 1:** Configured the pipeline to dynamically compute the `EKS_CLUSTER` name using the workspace environment branch prefix instead of hardcoding `dev-dev-dev`.
+* **Change 2:** Implemented aggressive Docker cleanup rules (`docker container prune`, `image prune -a`, `builder prune -a`) in the `always` post block to reclaim build agent disk space.
+
 

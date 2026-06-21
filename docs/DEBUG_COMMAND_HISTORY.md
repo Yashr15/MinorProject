@@ -338,3 +338,11 @@ During testing, we verified the Load Balancer endpoint was public and healthy by
 * **Why:** To dry-run Terraform using the authorized creator profile (`user2`) to verify the new access entry and node group recreation plan.
 * **Findings:** Confirmed the plan will create access entries for `terra-user` and replace the tainted, failed node groups.
 
+### 64. `git pull origin main` (Run locally)
+* **Why:** To pull the latest changes from GitHub containing the account-agnostic manifests, S3 providers configuration, HPA adjustments, and optimized Jenkinsfile.
+* **Findings:** Successfully updated 15 files and synchronized local codebase with remote.
+
+### 65. `git add . && git commit -m "chore: dynamically inject S3 state bucket in deploy.sh and add local.tfvars to gitignore" && git push origin main` (Run locally)
+* **Why:** To stage, commit, and push our final portability fixes (deploy.sh backend init script and gitignore overrides pattern) to the remote repository.
+* **Findings:** Pushed successfully, updating origin/main from `8536a0d` to `62f86fd`.
+
