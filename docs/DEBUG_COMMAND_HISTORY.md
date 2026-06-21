@@ -346,3 +346,59 @@ During testing, we verified the Load Balancer endpoint was public and healthy by
 * **Why:** To stage, commit, and push our final portability fixes (deploy.sh backend init script and gitignore overrides pattern) to the remote repository.
 * **Findings:** Pushed successfully, updating origin/main from `8536a0d` to `62f86fd`.
 
+---
+
+## Part 10: EKS Access Recovery, Dynamic Kubeconfig & Jenkins Pipeline Resiliency
+
+### 66. `aws sts get-caller-identity` (Run locally)
+* **Why:** To identify which IAM principal is currently active in the local CLI session.
+* **Findings:** Confirmed the active profile is `terra-user` (`arn:aws:iam::553136990999:user/terra-user`).
+
+### 67. `cat ~/.kube/config` (Run locally)
+* **Why:** To inspect the EKS cluster credentials configuration.
+* **Findings:** Discovered that the EKS cluster user definition hardcoded `AWS_PROFILE = user2` (`terraform-admin`), forcing `kubectl` to use `terraform-admin` credentials instead of the active session's `terra-user` credentials.
+
+### 68. `aws eks list-access-entries --cluster-name online-boutique-eks-dev` (Run locally)
+* **Why:** To view the active EKS Access Entries and confirm which users have access.
+* **Findings:** `terraform-admin` had an access entry, but `terra-user` did not.
+
+### 69. `aws eks list-associated-access-policies --cluster-name online-boutique-eks-dev --principal-arn arn:aws:iam::553136990999:user/terraform-admin` (Run locally)
+* **Why:** To check if `terraform-admin` has the admin access policy associated with its Access Entry.
+* **Findings:** `associatedAccessPolicies` was empty. When `jenkins_iam_arn` was cleared in `terraform.tfvars`, Terraform destroyed the policy association resource, stripping `terraform-admin` of EKS permissions.
+
+### 70. `aws eks associate-access-policy --cluster-name online-boutique-eks-dev --principal-arn arn:aws:iam::553136990999:user/terraform-admin --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy --access-scope type=cluster` (Run locally)
+* **Why:** To manually associate the `AmazonEKSClusterAdminPolicy` back to `terraform-admin` on the `online-boutique-eks-dev` cluster to restore its permissions.
+* **Findings:** Successfully associated.
+
+### 71. `aws eks create-access-entry --cluster-name online-boutique-eks-dev --principal-arn arn:aws:iam::553136990999:user/terra-user --type STANDARD` (Run locally)
+* **Why:** To register an EKS Access Entry for the active shell profile `terra-user` on the EKS cluster.
+* **Findings:** Access Entry created.
+
+### 72. `aws eks associate-access-policy --cluster-name online-boutique-eks-dev --principal-arn arn:aws:iam::553136990999:user/terra-user --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy --access-scope type=cluster` (Run locally)
+* **Why:** To associate the cluster admin policy to the `terra-user` access entry.
+* **Findings:** Successfully associated, giving `terra-user` EKS permissions.
+
+### 73. `python3 fix_kubeconfig.py` (Run locally)
+* **Why:** To run a script that edits `~/.kube/config` and removes the hardcoded `AWS_PROFILE=user2` env override block.
+* **Findings:** Successfully modified the file, enabling `kubectl` to dynamically authenticate with the current shell's active profile (`terra-user`).
+
+### 74. `kubectl get nodes` (Run locally - after fixes)
+* **Why:** To test if EKS API access is restored for the active terminal user.
+* **Findings:** Succeeded, listing the active nodes under `terra-user` directly.
+
+### 75. `aws ec2 describe-instances --filters "Name=instance-state-name,Values=running"` (Run locally)
+* **Why:** To check if there are running EC2 instances representing the Jenkins deployment.
+* **Findings:** Identified a running instance named `jenkin-yuv` at `3.111.246.245`.
+
+### 76. `aws eks list-access-entries --cluster-name online-boutique-eks-dev-dev` (Run locally)
+* **Why:** The deployment script created a workspace-aware cluster `online-boutique-eks-dev-dev`. I ran this to check its access entries.
+* **Findings:** `terra-user` (the creator) was present, but `terraform-admin` was missing.
+
+### 77. `aws eks create-access-entry --cluster-name online-boutique-eks-dev-dev --principal-arn arn:aws:iam::553136990999:user/terraform-admin --type STANDARD` (Run locally)
+* **Why:** To add `terraform-admin` as an access entry to the new `online-boutique-eks-dev-dev` cluster so the Jenkins server (which uses `terraform-admin` keys) can deploy to it.
+* **Findings:** Entry created.
+
+### 78. `aws eks associate-access-policy --cluster-name online-boutique-eks-dev-dev --principal-arn arn:aws:iam::553136990999:user/terraform-admin --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy --access-scope type=cluster` (Run locally)
+* **Why:** To associate the admin access policy to `terraform-admin` on the new `online-boutique-eks-dev-dev` cluster.
+* **Findings:** Successfully associated, authorizing the Jenkins CI/CD pipeline to deploy to the new cluster.
+

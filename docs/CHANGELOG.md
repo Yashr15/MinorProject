@@ -159,4 +159,18 @@ This file records every modification made to the codebase to fix issues during d
 * **Change 1:** Configured the pipeline to dynamically compute the `EKS_CLUSTER` name using the workspace environment branch prefix instead of hardcoding `dev-dev-dev`.
 * **Change 2:** Implemented aggressive Docker cleanup rules (`docker container prune`, `image prune -a`, `builder prune -a`) in the `always` post block to reclaim build agent disk space.
 
+---
 
+## 10. EKS Access Recovery, Kubeconfig Environment Clean-up & Jenkins Pipeline Resiliency
+
+### [terraform/eks.tf](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/eks.tf) & EKS Access Policies
+* **Change:** Restored EKS Access Policy associations for the `terraform-admin` principal. Added EKS Access Entry and EKS Access Policy Association for the default CLI terminal profile (`terra-user`).
+* **Why:** Clearing `jenkins_iam_arn` to `""` in `terraform.tfvars` caused Terraform to destroy the policy association resource mapping `AmazonEKSClusterAdminPolicy` to `terraform-admin`. This stripped `terraform-admin` of EKS permissions, resulting in `Forbidden` errors. Manually restoring it via AWS CLI and adding the default CLI user ensured both identities have cluster administrator access.
+
+### [~/.kube/config](file:///Users/yash/.kube/config)
+* **Change:** Removed the hardcoded `AWS_PROFILE` environment variable override (`value: user2`) from the EKS cluster user configuration.
+* **Why:** The local kubeconfig file forced `kubectl` to authenticate as `terraform-admin` (`user2`) regardless of the terminal's active AWS profile. Stripping the environment block allows `kubectl` to dynamically fall back to the terminal's active profile (`terra-user`), preventing permission mismatches.
+
+### [Jenkinsfile](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/Jenkinsfile)
+* **Change:** Injected an active check for the `terraform` command. If the Terraform CLI is not found on the Jenkins server agent, the pipeline automatically downloads the Linux binary for Terraform `1.9.0`, unzips it (using Python's `zipfile` module as a fail-safe fallback), and registers it on the execution path.
+* **Why:** The self-hosted Jenkins agent EC2 instance (`jenkin-yuv`) did not have the Terraform CLI pre-installed, causing the deployment stage to fail with `terraform: not found`. Adding dynamic installation ensures pipeline self-containment and resiliency.
