@@ -123,10 +123,11 @@ This file records every modification made to the codebase to fix issues during d
 * **Why:** To enable local developers to run incremental builds, saving bandwidth and computing resources, while ensuring Kubernetes only updates pods of modified services (zero-downtime rolling updates).
 
 ### [terraform/eks.tf](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/eks.tf), [terraform/variables.tf](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/variables.tf), [terraform/terraform.tfvars](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/terraform.tfvars) & [terraform/modules/eks/main.tf](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/modules/eks/main.tf)
-* **Change 1:** Introduced the `jenkins_iam_arn` variable.
+* **Change 1:** Introduced the `jenkins_iam_arn` and `additional_admin_arns` variables.
 * **Change 2:** Added conditional `aws_eks_access_entry.jenkins` and its corresponding admin access policy association.
-* **Change 3:** Disabled `bootstrap_self_managed_addons` to prevent node group destruction on updates.
-* **Why:** To grant administrative EKS access to the Jenkins execution role and avoid cluster control plane downtime.
+* **Change 3:** Created `aws_eks_access_entry.additional` and its policy association to dynamically grant cluster access to developers' local AWS profiles.
+* **Change 4:** Disabled `bootstrap_self_managed_addons` to prevent node group destruction on updates.
+* **Why:** To authorize multiple developers (like `terra-user`) and Jenkins, resolving the "Unauthorized" `kubectl` connection errors, and preventing EKS cluster control plane downtime.
 
 ### [docs/SETUP_GUIDE.md](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/docs/SETUP_GUIDE.md)
 * **Change:** Documented Step 6.8 "Configure EKS Access for Jenkins" and added state unlocking troubleshooting steps.

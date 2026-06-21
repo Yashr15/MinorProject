@@ -123,3 +123,9 @@ variable "jenkins_iam_arn" {
   default     = ""
 }
 
+variable "additional_admin_arns" {
+  type        = list(string)
+  description = "Additional AWS IAM User/Role ARNs (e.g. developers' local profiles) to grant admin access to the EKS cluster"
+  default     = []
+}
+

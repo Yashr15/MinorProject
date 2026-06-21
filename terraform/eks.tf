@@ -74,3 +74,22 @@ resource "aws_eks_access_policy_association" "jenkins_admin" {
   }
 }
 
+# Grant admin access to any additional developer profiles
+resource "aws_eks_access_entry" "additional" {
+  for_each      = toset(var.additional_admin_arns)
+  cluster_name  = module.eks.cluster_name
+  principal_arn = each.value
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "additional_admin" {
+  for_each      = toset(var.additional_admin_arns)
+  cluster_name  = module.eks.cluster_name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = each.value
+
+  access_scope {
+    type = "cluster"
+  }
+}
+

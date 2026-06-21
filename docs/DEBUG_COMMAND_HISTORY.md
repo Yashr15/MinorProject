@@ -314,3 +314,27 @@ During testing, we verified the Load Balancer endpoint was public and healthy by
 * **Why:** To verify if a specific image tag exists in AWS ECR.
 * **Findings:** Returned `ImageNotFoundException` because that specific hash-tag image had not been built or pushed yet, proving that the check works as a conditional check to skip builds.
 
+### 58. `aws eks describe-nodegroup --cluster-name online-boutique-eks-dev --nodegroup-name online-boutique-eks-dev-app-nodes` (Run locally)
+* **Why:** To inspect the EKS nodegroup status and identify the cause of the `CREATE_FAILED` status.
+* **Findings:** Revealed `Unhealthy nodes in the kubernetes cluster`, which was caused by the nodes failing to join the cluster during creation when the subnet tags were mismatched.
+
+### 59. `kubectl get nodes` (Run locally)
+* **Why:** To check if worker nodes are connected to the cluster.
+* **Findings:** Failed with a DNS lookup failure pointing to a stale cluster endpoint API domain hash (`F95D1...`).
+
+### 60. `aws eks describe-cluster --name online-boutique-eks-dev` (Run locally)
+* **Why:** To fetch the active EKS cluster configuration and endpoint from AWS.
+* **Findings:** The active endpoint hash was `6EB7D...`, indicating that our local `kubeconfig` was out of date.
+
+### 61. `aws eks update-kubeconfig --region ap-south-1 --name online-boutique-eks-dev` (Run locally)
+* **Why:** To update the local `kubeconfig` to point to the active cluster endpoint.
+* **Findings:** Successfully synchronized local kubectl config with the correct EKS API domain.
+
+### 62. `kubectl get nodes` (Run locally - after update)
+* **Why:** To list the cluster nodes after updating the endpoint.
+* **Findings:** Failed with `the server has asked for the client to provide credentials` (Unauthorized) because the cluster creator was `terraform-admin` (profile `user2`), whereas normal laptop operations were run under `terra-user` (profile `default`), which has no EKS Access Entry.
+
+### 63. `AWS_PROFILE=user2 terraform plan` (Run locally)
+* **Why:** To dry-run Terraform using the authorized creator profile (`user2`) to verify the new access entry and node group recreation plan.
+* **Findings:** Confirmed the plan will create access entries for `terra-user` and replace the tainted, failed node groups.
+
