@@ -80,22 +80,35 @@ pipeline {
                             def context = dockerContextMap.get(svc, "src/${svc}")
                             def ecrRepo = "${ECR_REGISTRY}/${PROJECT_NAME}/${svc}"
 
-                            echo "🔨 Building ${svc}..."
-                            sh """
-                                docker build -t ${ecrRepo}:${IMAGE_TAG} \
-                                             -t ${ecrRepo}:latest \
-                                             ${context}
-                            """
+                            // Calculate directory-specific git commit hash
+                            def svcTag = sh(script: "git log -1 --format='%h' -- ${context} 2>/dev/null || echo 'latest'", returnStdout: true).trim()
 
-                            echo "📤 Pushing ${svc}..."
-                            sh """
-                                docker push ${ecrRepo}:${IMAGE_TAG}
-                                docker push ${ecrRepo}:latest
-                            """
+                            // Check if image with this hash already exists in ECR
+                            def imageExists = sh(
+                                script: "aws ecr describe-images --repository-name ${PROJECT_NAME}/${svc} --image-ids imageTag=${svcTag} >/dev/null 2>&1 && echo 'true' || echo 'false'",
+                                returnStdout: true
+                            ).trim()
+
+                            if (imageExists == 'true') {
+                                echo "⏭️ Image ${ecrRepo}:${svcTag} already exists in ECR. Skipping build and push."
+                            } else {
+                                echo "🔨 Building ${svc} (tag: ${svcTag})..."
+                                sh """
+                                    docker build -t ${ecrRepo}:${svcTag} \
+                                                 -t ${ecrRepo}:latest \
+                                                 ${context}
+                                """
+
+                                echo "📤 Pushing ${svc}..."
+                                sh """
+                                    docker push ${ecrRepo}:${svcTag}
+                                    docker push ${ecrRepo}:latest
+                                """
+                            }
                         }
                     }
                 }
-                echo "✅ All images built and pushed"
+                echo "✅ Necessary images built and pushed"
             }
         }
 
@@ -117,12 +130,18 @@ pipeline {
                         'loadgenerator'
                     ]
 
+                    def dockerContextMap = [
+                        'cartservice': 'src/cartservice/src'
+                    ]
+
                     for (svc in services) {
-                        def ecrImage = "${ECR_REGISTRY}/${PROJECT_NAME}/${svc}:${IMAGE_TAG}"
+                        def context = dockerContextMap.get(svc, "src/${svc}")
+                        def svcTag = sh(script: "git log -1 --format='%h' -- ${context} 2>/dev/null || echo 'latest'", returnStdout: true).trim()
+                        def ecrImage = "${ECR_REGISTRY}/${PROJECT_NAME}/${svc}:${svcTag}"
 
                         // Replace image name in K8s manifest with full ECR URL
                         sh """
-                            sed -i 's|image: ${svc}|image: ${ecrImage}|g' \
+                            sed -E -i 's|image:[[:space:]]*([^[:space:]]+/)?${svc}(:[^[:space:]]+)?([[:space:]]+.*)?\$|image: ${ecrImage}|g' \
                                 kubernetes-manifests/${svc}.yaml || true
                         """
                     }

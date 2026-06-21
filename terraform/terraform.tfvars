@@ -30,3 +30,9 @@ infra_node_max_count     = 2
 
 # Network
 vpc_cidr = "10.0.0.0/16"
+
+# EKS Access Entry for Jenkins
+# Replace with the actual IAM User or Role ARN used by Jenkins
+# jenkins_iam_arn = "arn:aws:iam::553136990999:user/jenkins-ci"
+jenkins_iam_arn = ""
+

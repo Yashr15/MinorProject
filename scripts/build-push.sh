@@ -40,10 +40,10 @@ ALL_SERVICES=(
 # Determine which services to build
 if [ $# -eq 0 ]; then
     SERVICES=("${ALL_SERVICES[@]}")
-    echo "🔨 Building ALL services (tag: ${IMAGE_TAG})"
+    echo "🔨 Checking all services for changes..."
 else
     SERVICES=("$@")
-    echo "🔨 Building selected services: ${SERVICES[*]} (tag: ${IMAGE_TAG})"
+    echo "🔨 Checking selected services: ${SERVICES[*]}..."
 fi
 
 # Login to ECR
@@ -69,23 +69,29 @@ for SERVICE in "${SERVICES[@]}"; do
             ;;
     esac
 
+    SVC_TAG="$(git log -1 --format="%h" -- "${CONTEXT}" 2>/dev/null || echo 'latest')"
     ECR_REPO="${ECR_REGISTRY}/${PROJECT_NAME}/${SERVICE}"
 
     echo ""
-    echo "─── Building ${SERVICE} ───"
-    if docker build \
-        --platform linux/amd64 \
-        -t "${ECR_REPO}:${IMAGE_TAG}" \
-        -t "${ECR_REPO}:latest" \
-        "${CONTEXT}"; then
-
-        echo "📤 Pushing ${SERVICE}..."
-        docker push "${ECR_REPO}:${IMAGE_TAG}"
-        docker push "${ECR_REPO}:latest"
-        echo "✅ ${SERVICE} → ${ECR_REPO}:${IMAGE_TAG}"
+    echo "─── Processing ${SERVICE} ───"
+    if aws ecr describe-images --repository-name "${PROJECT_NAME}/${SERVICE}" --image-ids imageTag="${SVC_TAG}" >/dev/null 2>&1; then
+        echo "⏭️ Image ${ECR_REPO}:${SVC_TAG} already exists in ECR. Skipping build and push."
     else
-        echo "❌ Failed to build ${SERVICE}"
-        FAILED+=("${SERVICE}")
+        echo "🔨 Building ${SERVICE} (tag: ${SVC_TAG})..."
+        if docker build \
+            --platform linux/amd64 \
+            -t "${ECR_REPO}:${SVC_TAG}" \
+            -t "${ECR_REPO}:latest" \
+            "${CONTEXT}"; then
+
+            echo "📤 Pushing ${SERVICE}..."
+            docker push "${ECR_REPO}:${SVC_TAG}"
+            docker push "${ECR_REPO}:latest"
+            echo "✅ ${SERVICE} → ${ECR_REPO}:${SVC_TAG}"
+        else
+            echo "❌ Failed to build ${SERVICE}"
+            FAILED+=("${SERVICE}")
+        fi
     fi
 done
 

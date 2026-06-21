@@ -247,7 +247,22 @@ Go to **Manage Jenkins → Credentials → Global → Add Credentials**:
 | `aws-credentials` | AWS Credentials | Your AWS Access Key + Secret Key (from your local `[user2]` profile keys) |
 | `aws-account-id` | Secret text | Your 12-digit AWS Account ID (`553136990999`) |
 
-### 6.8 Create the Pipeline
+### 6.8 Configure EKS Access for Jenkins (Critical Ritual)
+
+By default, EKS only allows the AWS identity that created the cluster to connect. To authorize Jenkins:
+
+1. **Find Jenkins' AWS Identity:** Find the AWS IAM User or Role ARN that corresponds to the `aws-credentials` configured above.
+2. **Update Terraform configuration:** Open `terraform/terraform.tfvars` and set the `jenkins_iam_arn` variable:
+   ```hcl
+   jenkins_iam_arn = "arn:aws:iam::<YOUR_ACCOUNT_ID>:user/<JENKINS_AWS_USER>"
+   ```
+3. **Apply the configuration:** Run the following commands in the `terraform/` directory:
+   ```bash
+   terraform apply
+   ```
+   *Note: This will add the Access Entry to EKS without replacing or destroying the cluster.*
+
+### 6.9 Create the Pipeline
 
 1. **New Item → Pipeline**
 2. Name: `online-boutique`
@@ -274,3 +289,22 @@ This safely removes everything in reverse order:
 1. Deletes K8s deployments
 2. Uninstalls monitoring
 3. Destroys all Terraform infrastructure (VPC, EKS, ECR, IAM)
+
+---
+
+## Troubleshooting Common Issues
+
+### 1. Terraform State Lock Errors (`Error acquiring the state lock`)
+If a deployment fails or is terminated abruptly, the remote state lock might remain active. You will see an error like:
+`Error acquiring the state lock... Lock Info: ID: <LOCK_ID>`.
+
+**To fix this:**
+Run the unlock command in the `terraform/` directory using the ID from the error message:
+```bash
+terraform force-unlock <LOCK_ID>
+```
+
+### 2. Jenkins Fails to Connect to EKS (`Unauthorized` or Connection Timeout)
+- **Unauthorized:** Double check that `jenkins_iam_arn` in `terraform/terraform.tfvars` matches the credentials used by Jenkins, and that you ran `terraform apply`.
+- **Connection Timeout:** Ensure that the Jenkins instance IP is allowed by the security groups or is running within the VPC.
+

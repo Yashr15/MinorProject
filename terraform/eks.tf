@@ -54,3 +54,23 @@ resource "aws_security_group_rule" "jenkins_to_eks" {
   cidr_blocks       = [var.vpc_cidr] # Allows access from the VPC CIDR (including Jenkins EC2)
   security_group_id = module.eks.cluster_security_group_id
 }
+
+# Grant Jenkins administrative access to the EKS cluster
+resource "aws_eks_access_entry" "jenkins" {
+  count         = var.jenkins_iam_arn != "" ? 1 : 0
+  cluster_name  = module.eks.cluster_name
+  principal_arn = var.jenkins_iam_arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "jenkins_admin" {
+  count         = var.jenkins_iam_arn != "" ? 1 : 0
+  cluster_name  = module.eks.cluster_name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = var.jenkins_iam_arn
+
+  access_scope {
+    type = "cluster"
+  }
+}
+

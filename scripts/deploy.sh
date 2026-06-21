@@ -71,6 +71,18 @@ log "Phase 1: Provisioning infrastructure with Terraform..."
 
 cd "${PROJECT_ROOT}/terraform"
 
+# Check if jenkins_iam_arn is configured in terraform.tfvars
+if [ -f "terraform.tfvars" ]; then
+    JENKINS_ARN=$(grep -E '^[[:space:]]*jenkins_iam_arn[[:space:]]*=' terraform.tfvars | cut -d'=' -f2 | tr -d '"[:space:]')
+    if [ -z "${JENKINS_ARN}" ]; then
+        warn "jenkins_iam_arn is NOT set in terraform/terraform.tfvars."
+        warn "If you run Jenkins CI/CD pipelines, they will fail to connect to EKS."
+        warn "You can configure it in terraform/terraform.tfvars to authorize Jenkins."
+    else
+        log "Jenkins IAM Access Entry will be configured for: ${JENKINS_ARN}"
+    fi
+fi
+
 # Initialize Terraform
 terraform init -input=false
 
@@ -135,8 +147,6 @@ ALL_SERVICES=(
     "loadgenerator"
 )
 
-IMAGE_TAG="$(git rev-parse --short HEAD 2>/dev/null || echo 'latest')"
-
 for SERVICE in "${ALL_SERVICES[@]}"; do
     case "${SERVICE}" in
         "cartservice")
@@ -147,22 +157,27 @@ for SERVICE in "${ALL_SERVICES[@]}"; do
             ;;
     esac
     ECR_REPO="${ECR_REGISTRY}/${PROJECT_NAME}/${SERVICE}"
+    SVC_TAG="$(git log -1 --format="%h" -- "${CONTEXT}" 2>/dev/null || echo 'latest')"
 
-    log "  🔨 Building ${SERVICE}..."
-    docker build \
-        --platform linux/amd64 \
-        -t "${ECR_REPO}:${IMAGE_TAG}" \
-        -t "${ECR_REPO}:latest" \
-        "${CONTEXT}"
+    if aws ecr describe-images --repository-name "${PROJECT_NAME}/${SERVICE}" --image-ids imageTag="${SVC_TAG}" >/dev/null 2>&1; then
+        success "  ⏭️ ${SERVICE} (tag: ${SVC_TAG}) already exists in ECR. Skipping build."
+    else
+        log "  🔨 Building ${SERVICE} (tag: ${SVC_TAG})..."
+        docker build \
+            --platform linux/amd64 \
+            -t "${ECR_REPO}:${SVC_TAG}" \
+            -t "${ECR_REPO}:latest" \
+            "${CONTEXT}"
 
-    log "  📤 Pushing ${SERVICE}..."
-    docker push "${ECR_REPO}:${IMAGE_TAG}"
-    docker push "${ECR_REPO}:latest"
+        log "  📤 Pushing ${SERVICE}..."
+        docker push "${ECR_REPO}:${SVC_TAG}"
+        docker push "${ECR_REPO}:latest"
 
-    success "  ${SERVICE} → ${ECR_REPO}:${IMAGE_TAG}"
+        success "  ✅ ${SERVICE} → ${ECR_REPO}:${SVC_TAG}"
+    fi
 done
 
-success "All images built and pushed!"
+success "All necessary images built and pushed!"
 
 # ═══════════════════════════════════════════════════
 # PHASE 4: DEPLOY TO EKS
@@ -172,7 +187,16 @@ log "Phase 4: Deploying to EKS..."
 cd "${PROJECT_ROOT}"
 
 for SERVICE in "${ALL_SERVICES[@]}"; do
-    ECR_IMAGE="${ECR_REGISTRY}/${PROJECT_NAME}/${SERVICE}:${IMAGE_TAG}"
+    case "${SERVICE}" in
+        "cartservice")
+            CONTEXT="src/cartservice/src"
+            ;;
+        *)
+            CONTEXT="src/${SERVICE}"
+            ;;
+    esac
+    SVC_TAG="$(git log -1 --format="%h" -- "${CONTEXT}" 2>/dev/null || echo 'latest')"
+    ECR_IMAGE="${ECR_REGISTRY}/${PROJECT_NAME}/${SERVICE}:${SVC_TAG}"
     sed -i.bak -E "s|image:[[:space:]]*([^[:space:]]+/)?${SERVICE}(:[^[:space:]]+)?([[:space:]]+.*)?$|image: ${ECR_IMAGE}|g" \
         "kubernetes-manifests/${SERVICE}.yaml" 2>/dev/null || true
 done

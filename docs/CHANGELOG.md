@@ -106,4 +106,30 @@ This file records every modification made to the codebase to fix issues during d
 * **Change:** Merged and refined Step 6 to document Java 21, the 2026 GPG signing keys, Docker daemon group configuration, and AWS CLI + `kubectl` local server setups.
 * **Why:** To ensure the central setup documentation is correct, functional, and up-to-date.
 
+---
+
+## 8. Directory Content Hashing & ECR Checking (Incremental Builds & Zero-Downtime Deployments)
+
+### [Jenkinsfile](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/Jenkinsfile)
+* **Change 1:** Implemented directory-specific Git commit hashing to tag docker images (`git log -1 --format='%h' -- ${context}`).
+* **Change 2:** Added ECR image validation (`aws ecr describe-images`) to dynamically skip building and pushing already existing images.
+* **Change 3:** Updated the `Update Manifests` stage to use a robust regular expression: `sed -E -i 's|image:[[:space:]]*([^[:space:]]+/)?${svc}(:[^[:space:]]+)?([[:space:]]+.*)?\$|image: ${ecrImage}|g'`.
+* **Why:** To prevent rebuilding and pushing unmodified services on every build, and to fix a critical bug where naive `sed` replacements failed to update image tags in Kubernetes manifest files.
+
+### [scripts/build-push.sh](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/scripts/build-push.sh) & [scripts/deploy.sh](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/scripts/deploy.sh)
+* **Change 1:** Configured context directories per service (e.g. `src/cartservice/src` for `cartservice`).
+* **Change 2:** Replaced the global commit tag with folder-specific git logs.
+* **Change 3:** Integrated `aws ecr describe-images` checks before docker builds.
+* **Why:** To enable local developers to run incremental builds, saving bandwidth and computing resources, while ensuring Kubernetes only updates pods of modified services (zero-downtime rolling updates).
+
+### [terraform/eks.tf](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/eks.tf), [terraform/variables.tf](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/variables.tf), [terraform/terraform.tfvars](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/terraform.tfvars) & [terraform/modules/eks/main.tf](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/terraform/modules/eks/main.tf)
+* **Change 1:** Introduced the `jenkins_iam_arn` variable.
+* **Change 2:** Added conditional `aws_eks_access_entry.jenkins` and its corresponding admin access policy association.
+* **Change 3:** Disabled `bootstrap_self_managed_addons` to prevent node group destruction on updates.
+* **Why:** To grant administrative EKS access to the Jenkins execution role and avoid cluster control plane downtime.
+
+### [docs/SETUP_GUIDE.md](file:///Users/yash/Desktop/desktop%20files/minorProject/MinorProject/docs/SETUP_GUIDE.md)
+* **Change:** Documented Step 6.8 "Configure EKS Access for Jenkins" and added state unlocking troubleshooting steps.
+* **Why:** To establish a clear, repeatable post-clone EKS setup ritual for developers and CI/CD pipelines.
+
 

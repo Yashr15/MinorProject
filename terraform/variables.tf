@@ -116,3 +116,10 @@ variable "microservices" {
     "shippingservice"
   ]
 }
+
+variable "jenkins_iam_arn" {
+  type        = string
+  description = "The AWS IAM User or Role ARN that Jenkins uses to deploy to EKS (e.g., arn:aws:iam::123456789012:user/jenkins)"
+  default     = ""
+}
+

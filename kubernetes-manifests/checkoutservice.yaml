@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: server
-        image: 553136990999.dkr.ecr.ap-south-1.amazonaws.com/online-boutique/checkoutservice:6bec0a9
+        image: 553136990999.dkr.ecr.ap-south-1.amazonaws.com/online-boutique/checkoutservice:6858d4a
         ports:
         - containerPort: 5050
         readinessProbe:

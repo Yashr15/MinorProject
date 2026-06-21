@@ -290,3 +290,27 @@ During testing, we verified the Load Balancer endpoint was public and healthy by
 * **Why:** Pulled changes from GitHub, integrated our local fixes, and pushed the updated code to the remote repository.
 * **Findings:** Synced local codebase with remote.
 
+---
+
+## Part 9: Directory Content Hashing & Local Cleanup
+
+### 53. `docker image prune -a` (Run locally)
+* **Why:** To clean up all local Docker images not currently associated with a running container to reclaim disk space after identifying that we had multiple tags and old builds cached locally.
+* **Findings:** Reclaimed local disk space and pruned unused cached microservice image layers.
+
+### 54. `git status` (Run locally)
+* **Why:** To check the current state of modified files in the repository before finalizing the pipeline.
+* **Findings:** Verified that the local workspace has the modified files for scripts, Jenkinsfile, docs, and Terraform configurations.
+
+### 55. `git diff Jenkinsfile` (Run locally)
+* **Why:** To review the changes applied to the Jenkins pipeline stages.
+* **Findings:** Identified a naive `sed` command in Stage 4 of the Jenkinsfile that was failing to update manifests since it was matching `image: frontend` instead of the full ECR registry URL.
+
+### 56. `bash -n scripts/build-push.sh && bash -n scripts/deploy.sh` (Run locally)
+* **Why:** To check for syntax correctness in the updated shell scripts.
+* **Findings:** The syntax was valid.
+
+### 57. `aws ecr describe-images --repository-name online-boutique/frontend --image-ids imageTag=34e95c8` (Run locally)
+* **Why:** To verify if a specific image tag exists in AWS ECR.
+* **Findings:** Returned `ImageNotFoundException` because that specific hash-tag image had not been built or pushed yet, proving that the check works as a conditional check to skip builds.
+
