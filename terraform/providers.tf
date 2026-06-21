@@ -26,7 +26,7 @@ terraform {
   # NOTE: Replace <YOUR_AWS_ACCOUNT_ID> with your actual account ID
   # after running setup-backend.sh
   backend "s3" {
-    bucket         = "online-boutique-terraform-state-553136990999"
+    # bucket is passed via -backend-config in deploy.sh / Jenkinsfile (account-agnostic)
     key            = "infrastructure/terraform.tfstate"
     region         = "ap-south-1"
     dynamodb_table = "online-boutique-terraform-lock"
